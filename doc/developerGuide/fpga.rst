@@ -419,4 +419,8 @@ which can be used to modify MIO functionality at runtime.
 |                    | SPI can then only be used for writing (maybe 3-wire) |
 +--------------------+------------------------------------------------------+
 
-.. include:: regset.rst
+
+.. include:: regset_common.rst
+
+
+
