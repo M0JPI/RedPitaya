@@ -7,9 +7,6 @@
  *
  * (c) Red Pitaya  http://www.redpitaya.com
  *
- * This part of code is written in C programming language.
- * Please visit http://en.wikipedia.org/wiki/C_(programming_language)
- * for more details on the language used herein.
  */
 
 
@@ -17,20 +14,20 @@
 #define ACQUIRE_H_
 
 #include "scpi/types.h"
+#include "common.h"
 #include "rp.h"
 
-typedef enum {
-    RP_SCPI_VOLTS,
-    RP_SCPI_RAW,
-} rp_scpi_acq_unit_t;
 
 int RP_AcqSetDefaultValues();
-scpi_result_t RP_AcqSetDataFormat(scpi_t *context);
+scpi_result_t RP_AcqDataFormat(scpi_t *context);
+scpi_result_t RP_AcqDataFormatQ(scpi_t *context);
 scpi_result_t RP_AcqStart(scpi_t * context);
 scpi_result_t RP_AcqStop(scpi_t *context);
 scpi_result_t RP_AcqReset(scpi_t * context);
 scpi_result_t RP_AcqDecimation(scpi_t * context);
 scpi_result_t RP_AcqDecimationQ(scpi_t * context);
+scpi_result_t RP_AcqDecimationFactor(scpi_t * context);
+scpi_result_t RP_AcqDecimationFactorQ(scpi_t * context);
 scpi_result_t RP_AcqSamplingRateHzQ(scpi_t * context);
 scpi_result_t RP_AcqAveraging(scpi_t * context);
 scpi_result_t RP_AcqAveragingQ(scpi_t * context);
@@ -57,15 +54,17 @@ scpi_result_t RP_AcqDataQ(scpi_t * context);
 scpi_result_t RP_AcqDataOldestAllQ(scpi_t * context);
 scpi_result_t RP_AcqOldestDataQ(scpi_t *context);
 scpi_result_t RP_AcqLatestDataQ(scpi_t *context);
+scpi_result_t RP_AcqTriggerDataQ(scpi_t *context);
 scpi_result_t RP_AcqBufferSizeQ(scpi_t * context);
 
 scpi_result_t RP_AcqGetLatestData(rp_channel_t channel, scpi_t * context);
 
-#ifdef Z20_250_12
+
 scpi_result_t RP_AcqAC_DC(scpi_t * context);
 scpi_result_t RP_AcqAC_DCQ(scpi_t * context);
-scpi_result_t RP_AcqExtTriggerLevel(scpi_t *context);
-scpi_result_t RP_AcqExtTriggerLevelQ(scpi_t *context);
-#endif
+
+scpi_result_t RP_ExtTriggerLevel(scpi_t *context);
+scpi_result_t RP_ExtTriggerLevelQ(scpi_t *context);
+
 
 #endif /* ACQUIRE_H_ */

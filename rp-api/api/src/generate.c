@@ -16,27 +16,25 @@
 #include <stdio.h>
 #include <stdlib.h>
 #include <math.h>
-#include "rp_cross.h"
 #include "common.h"
 #include "generate.h"
-#include "calib.h"
 
 static volatile generate_control_t *generate = NULL;
-static volatile int32_t *data_chA = NULL;
-static volatile int32_t *data_chB = NULL;
+static volatile int32_t *data_ch[2] = {NULL,NULL};
 
 
 int generate_Init() {
     cmn_Map(GENERATE_BASE_SIZE, GENERATE_BASE_ADDR, (void **) &generate);
-    data_chA = (int32_t *) ((char *) generate + (CHA_DATA_OFFSET));
-    data_chB = (int32_t *) ((char *) generate + (CHB_DATA_OFFSET));
+    data_ch[0] = (int32_t *) ((char *) generate + (CHA_DATA_OFFSET));
+    data_ch[1] = (int32_t *) ((char *) generate + (CHB_DATA_OFFSET));
     return RP_OK;
 }
 
 int generate_Release() {
-    cmn_Unmap(GENERATE_BASE_SIZE, (void **) &generate);
-    data_chA = NULL;
-    data_chB = NULL;
+    if (generate)
+        cmn_Unmap(GENERATE_BASE_SIZE, (void **) &generate);
+    data_ch[0] = NULL;
+    data_ch[1] = NULL;
     return RP_OK;
 }
 
@@ -71,10 +69,10 @@ int generate_getOutputEnabled(rp_channel_t channel, bool *enabled) {
     return RP_OK;
 }
 
-int generate_setFrequency(rp_channel_t channel, float frequency) {
+int generate_setFrequency(rp_channel_t channel, float frequency,float baseFreq) {
     volatile ch_properties_t *ch_properties;
     getChannelPropertiesAddress(&ch_properties, channel);
-    uint32_t value = (uint32_t) round(65536 * frequency / DAC_FREQUENCY * DAC_BUFFER_SIZE);
+    uint32_t value = (uint32_t) round(65536 * frequency / baseFreq * DAC_BUFFER_SIZE);
     cmn_DebugCh("ch_properties->counterStep",channel,value);
     ch_properties->counterStep = value;
     uint32_t wrap_flag = 1;
@@ -83,10 +81,10 @@ int generate_setFrequency(rp_channel_t channel, float frequency) {
     return RP_OK;
 }
 
-int generate_getFrequency(rp_channel_t channel, float *frequency) {
+int generate_getFrequency(rp_channel_t channel, float *frequency,float baseFreq) {
     volatile ch_properties_t *ch_properties;
     getChannelPropertiesAddress(&ch_properties, channel);
-    *frequency = (float) round((ch_properties->counterStep * DAC_FREQUENCY) / (65536 * DAC_BUFFER_SIZE));
+    *frequency = (float) round((ch_properties->counterStep * baseFreq) / (65536 * DAC_BUFFER_SIZE));
     return RP_OK;
 }
 
@@ -209,11 +207,11 @@ int generate_simultaneousTrigger() {
 
 int generate_setOutputEnableSync(bool enable){
     if (enable) {
-        cmn_Debug("cmn_SetBits((uint32_t *) generate) mask 0x00800080",0x00000000);
-        return cmn_SetBits((uint32_t *) generate, 0x00000000 , 0x00800080);
+         cmn_Debug("cmn_UnsetBits((uint32_t *) generate) mask 0x00800080",0x00800080);
+         return cmn_UnsetBits((uint32_t *) generate, 0x00800080 , 0x00800080);
     }else{
-        cmn_Debug("cmn_SetBits((uint32_t *) generate) mask 0x00800080",0x00800080);
-        return cmn_SetBits((uint32_t *) generate, 0x00800080 , 0x00800080);
+         cmn_Debug("cmn_SetBits((uint32_t *) generate) mask 0x00800080",0x00800080);
+         return cmn_SetBits((uint32_t *) generate, 0x00800080 , 0x00800080);
     }
 }
 
@@ -231,133 +229,178 @@ int generate_ResetChannelSM(rp_channel_t channel){
     uint32_t value = channel == RP_CH_1 ? 0x00000040 : 0x00400000;
     cmn_Debug("cmn_SetBits((uint32_t *) generate) mask 0x00400040",value);
     cmn_SetBits((uint32_t *) generate, value, value);
-    cmn_Debug("cmn_UnsetBits((uint32_t *) generate) mask0x00400040",value);
+    cmn_Debug("cmn_UnsetBits((uint32_t *) generate) mask 0x00400040",value);
     cmn_UnsetBits((uint32_t *) generate, value, value);
     return RP_OK;
 }
 
 
 int generate_writeData(rp_channel_t channel, float *data, int32_t start, uint32_t length) {
-    volatile int32_t *dataOut;
-    CHANNEL_ACTION(channel,
-            dataOut = data_chA,
-            dataOut = data_chB)
+
+    uint8_t bits = 0;
+    if (rp_HPGetFastDACBits(&bits) != RP_HP_OK){
+        fprintf(stderr,"[Error:generate_writeData] Can't get fast DAC bits\n");
+        return RP_NOTS;
+    }
+
+    bool is_sign = false;
+    if (rp_HPGetFastDACIsSigned(&is_sign) != RP_HP_OK){
+        fprintf(stderr,"[Error:generate_writeData] Can't get fast DAC sign value\n");
+        return RP_NOTS;
+    }
+
+    volatile int32_t *dataOut = data_ch[channel];
 
     volatile ch_properties_t *properties;
     getChannelPropertiesAddress(&properties, channel);
     generate_setWrapCounter(channel, length);
 
-    //rp_calib_params_t calib = calib_GetParams();
-    int dc_offs = 0;//channel == RP_CH_1 ? calib.be_ch1_dc_offs: calib.be_ch2_dc_offs;
-    uint32_t amp_max = 0; //channel == RP_CH_1 ? calib.be_ch1_fs: calib.be_ch2_fs;
     if (start < 0) start += DAC_BUFFER_SIZE;
     for(int i = start; i < start + DAC_BUFFER_SIZE; i++) {
-        dataOut[i % DAC_BUFFER_SIZE] = cmn_CnvVToCnt(DATA_BIT_LENGTH, data[i-start] * AMPLITUDE_MAX , AMPLITUDE_MAX, false, amp_max, dc_offs, 0.0);
+        dataOut[i % DAC_BUFFER_SIZE] =  cmn_convertToCnt(data[i-start],bits,1.0,is_sign,1,0);
     }
     return RP_OK;
 }
 
-
-#if defined Z10 || defined Z20 || defined Z20_125 || defined Z20_125_4CH
-
-int generate_setAmplitude(rp_channel_t channel, float amplitude) {
-    volatile ch_properties_t *ch_properties;
-    uint32_t amp_max = calib_getGenScale(channel);
-    getChannelPropertiesAddress(&ch_properties, channel);
-    uint32_t value = cmn_CnvVToCnt(DATA_BIT_LENGTH, amplitude , AMPLITUDE_MAX , false, amp_max, 0, 0.0);
-    cmn_DebugCh("ch_properties->amplitudeScale",channel,value);
-    ch_properties->amplitudeScale = value;
-    return RP_OK;
-}
-
-int generate_getAmplitude(rp_channel_t channel, float *amplitude) {
-    volatile ch_properties_t *ch_properties;
-    uint32_t amp_max = calib_getGenScale(channel);
-    getChannelPropertiesAddress(&ch_properties, channel);
-    *amplitude = cmn_CnvNormCntToV(DATA_BIT_LENGTH, ch_properties->amplitudeScale, AMPLITUDE_MAX , amp_max, 0, 0.0 , 1.0);
-    return RP_OK;
-}
-
-int generate_setDCOffset(rp_channel_t channel, float offset) {
-    volatile ch_properties_t *ch_properties;
-    int dc_offs = calib_getGenOffset(channel);
-    uint32_t amp_max = calib_getGenScale(channel);
-    getChannelPropertiesAddress(&ch_properties, channel);
-    uint32_t value = cmn_CnvVToCnt(DATA_BIT_LENGTH, offset , (float) (OFFSET_MAX/2.f), false, amp_max, dc_offs, 0);
-    cmn_DebugCh("ch_properties->amplitudeScale",channel,value);
-    ch_properties->amplitudeOffset = value;
-    return RP_OK;
-}
-
-int generate_getDCOffset(rp_channel_t channel, float *offset) {
-    volatile ch_properties_t *ch_properties;
-    int dc_offs = calib_getGenOffset(channel);
-    uint32_t amp_max = calib_getGenScale(channel);
-    getChannelPropertiesAddress(&ch_properties, channel);
-    *offset = cmn_CnvNormCntToV(DATA_BIT_LENGTH, ch_properties->amplitudeOffset, (float) (OFFSET_MAX/2.f), amp_max, dc_offs, 0 , 1.0);
-    return RP_OK;
-}
-
-int generate_setBurstLastValue(rp_channel_t channel, float amplitude){
-    int dc_offs = calib_getGenOffset(channel);
-    uint32_t amp_max = calib_getGenScale(channel);
-    uint32_t cnt = cmn_CnvVToCnt(DATA_BIT_LENGTH, amplitude , AMPLITUDE_MAX, false, amp_max, dc_offs, 0);
-    cmn_DebugCh("generate->BurstFinalValue_ch",channel,cnt);
-    CHANNEL_ACTION(channel,
-        generate->BurstFinalValue_chA = cnt,
-        generate->BurstFinalValue_chB = cnt)
-    return RP_OK;
-}
-
-int generate_getBurstLastValue(rp_channel_t channel, float *amplitude){
-    int dc_offs = calib_getGenOffset(channel);
-    uint32_t amp_max = calib_getGenScale(channel);
-    *amplitude = cmn_CnvNormCntToV(DATA_BIT_LENGTH, channel == RP_CH_1 ? (generate->BurstFinalValue_chA) : (generate->BurstFinalValue_chB)
-        , AMPLITUDE_MAX , amp_max, dc_offs, 0.0 , 1.0);
-    return RP_OK;
-}
-
-#endif
-
-#ifdef Z20_250_12
-
 int generate_setAmplitude(rp_channel_t channel,rp_gen_gain_t gain, float amplitude) {
+
+    float fsBase = 0;
+    if (rp_HPGetHWDACFullScale(&fsBase) != RP_HP_OK){
+        ERROR("Can't get fast HW DAC full scale");
+        return RP_NOTS;
+    }
+
+    if (fsBase == 0){
+        ERROR("HW DAC Full Scale is zero");
+        return RP_NOTS;
+    }
+
+    uint8_t bits = 0;
+    if (rp_HPGetFastDACBits(&bits) != RP_HP_OK){
+        ERROR("Can't get fast DAC bits");
+        return RP_NOTS;
+    }
+
+    bool is_sign = false;
+    if (rp_HPGetFastDACIsSigned(&is_sign) != RP_HP_OK){
+        ERROR("Can't get fast DAC sign value");
+        return RP_NOTS;
+    }
+
+    bool x5_gain = false;
+    if (rp_HPGetIsGainDACx5(&x5_gain) != RP_HP_OK) {
+        ERROR("Can't get fast DAC x5 gain");
+        return RP_NOTS;
+    }
+
+    if (!x5_gain && gain == RP_GAIN_5X){
+        ERROR("Can't set gain on unsupported board");
+        return RP_NOTS;
+    }
+
+    double gain_calib;
+    int32_t offset;
+    int ret = 0;
+    switch (gain)
+    {
+        case RP_GAIN_1X:
+            ret = rp_CalibGetFastDACCalibValue(convertCh(channel),RP_GAIN_CALIB_1X,&gain_calib,&offset);
+        break;
+        case RP_GAIN_5X:
+            ret = rp_CalibGetFastDACCalibValue(convertCh(channel),RP_GAIN_CALIB_5X,&gain_calib,&offset);
+        break;
+        default:
+            ERROR("Unknown gain: %d",gain);
+            return RP_EOOR;
+            break;
+    }
+
+    if (ret != RP_HW_CALIB_OK){
+        ERROR("Get calibaration: %d",ret);
+        return RP_EOOR;
+    }
+
     volatile ch_properties_t *ch_properties;
-    uint32_t amp_max = calib_getGenScale(channel,gain);
+    //uint32_t amp_max = calib_getGenScale(channel,gain);
     getChannelPropertiesAddress(&ch_properties, channel);
-    uint32_t value = cmn_CnvVToCnt(DATA_BIT_LENGTH, amplitude, AMPLITUDE_MAX , false, amp_max, 0, 0.0);
+
+    //uint32_t value = cmn_CnvVToCnt(DATA_BIT_LENGTH, amplitude, AMPLITUDE_MAX , false, amp_max, 0, 0.0);
+    // Spechal convert from Volt to RAW. 0x2000 = 1x
+    int32_t value = cmn_convertToCnt(amplitude * gain_calib, bits, fsBase,is_sign,1, 0);
+    //  fprintf(stderr,"Gain %f amplitude  %f ofcalb %d res %d bits %d fsBase %f\n",gain_calib,amplitude,0,value,bits,fsBase);
     cmn_DebugCh("ch_properties->amplitudeScale",channel,value);
     ch_properties->amplitudeScale = value;
     return RP_OK;
 }
 
-int generate_getAmplitude(rp_channel_t channel,rp_gen_gain_t gain, float *amplitude) {
-    volatile ch_properties_t *ch_properties;
-    uint32_t amp_max = calib_getGenScale(channel,gain);
-    getChannelPropertiesAddress(&ch_properties, channel);
-    *amplitude = cmn_CnvNormCntToV(DATA_BIT_LENGTH, ch_properties->amplitudeScale, AMPLITUDE_MAX  , amp_max, 0, 0.0, 1.0);
-    return RP_OK;
-}
 
 int generate_setDCOffset(rp_channel_t channel,rp_gen_gain_t gain, float offset) {
+
+    float fsBase = 0;
+    if (rp_HPGetHWDACFullScale(&fsBase) != RP_HP_OK){
+        ERROR("Can't get fast HW DAC full scale");
+        return RP_NOTS;
+    }
+
+    if (fsBase == 0){
+        ERROR("HW DAC Full Scale is zero");
+        return RP_NOTS;
+    }
+
+    uint8_t bits = 0;
+    if (rp_HPGetFastDACBits(&bits) != RP_HP_OK){
+        ERROR("Can't get fast DAC bits");
+        return RP_NOTS;
+    }
+
+    bool is_sign = false;
+    if (rp_HPGetFastDACIsSigned(&is_sign) != RP_HP_OK){
+        ERROR("Can't get fast DAC sign value");
+        return RP_NOTS;
+    }
+
+    bool x5_gain = false;
+    if (rp_HPGetIsGainDACx5(&x5_gain) != RP_HP_OK) {
+        ERROR("Can't get fast DAC x5 gain");
+        return RP_NOTS;
+    }
+
+    if (!x5_gain && gain == RP_GAIN_5X){
+        ERROR("Can't set gain on unsupported board");
+        return RP_NOTS;
+    }
+
+    double gain_calib;
+    int32_t offset_calib;
+    int ret = 0;
+    switch (gain)
+    {
+        case RP_GAIN_1X:
+            ret = rp_CalibGetFastDACCalibValue(convertCh(channel),RP_GAIN_CALIB_1X,&gain_calib,&offset_calib);
+        break;
+        case RP_GAIN_5X:
+            ret = rp_CalibGetFastDACCalibValue(convertCh(channel),RP_GAIN_CALIB_5X,&gain_calib,&offset_calib);
+        break;
+        default:
+            ERROR("Unknown gain: %d",gain);
+            return RP_EOOR;
+            break;
+    }
+
+    if (ret != RP_HW_CALIB_OK){
+        ERROR("Get calibaration: %d",ret);
+        return RP_EOOR;
+    }
+
     volatile ch_properties_t *ch_properties;
-    int dc_offs = calib_getGenOffset(channel,gain);
-    uint32_t amp_max = calib_getGenScale(channel,gain);
     getChannelPropertiesAddress(&ch_properties, channel);
-    uint32_t value = cmn_CnvVToCnt(DATA_BIT_LENGTH, offset, (float) (OFFSET_MAX/2.f), false, amp_max, dc_offs, 0);
+    int32_t value = cmn_convertToCnt(offset * gain_calib,bits,fsBase,is_sign,1,offset_calib);
+//    fprintf(stderr,"Gain %f offset  %f ofcalb %d res %d bits %d fsBase %f\n",gain_calib,offset,offset_calib,value,bits,fsBase);
     cmn_DebugCh("ch_properties->amplitudeOffset",channel,value);
     ch_properties->amplitudeOffset = value;
     return RP_OK;
 }
 
-int generate_getDCOffset(rp_channel_t channel,rp_gen_gain_t gain, float *offset) {
-    volatile ch_properties_t *ch_properties;
-    int dc_offs = calib_getGenOffset(channel,gain);
-    uint32_t amp_max = calib_getGenScale(channel,gain);
-    getChannelPropertiesAddress(&ch_properties, channel);
-    *offset = cmn_CnvNormCntToV(DATA_BIT_LENGTH, ch_properties->amplitudeOffset, (float) (OFFSET_MAX/2.f), amp_max, dc_offs, 0 , 1.0);
-    return RP_OK;
-}
 
 int generate_getEnableTempProtection(rp_channel_t channel, bool *enable){
     bool value;
@@ -370,11 +413,11 @@ int generate_getEnableTempProtection(rp_channel_t channel, bool *enable){
 
 int generate_setEnableTempProtection(rp_channel_t channel, bool enable) {
     if (channel == RP_CH_1) {
-        cmn_Debug("generate->AtempProtected",disable ? 1 : 0);
+        cmn_Debug("generate->AtempProtected",enable ? 1 : 0);
         generate->AtempProtected = enable ? 1 : 0;
     }
     else if (channel == RP_CH_2) {
-        cmn_Debug("generate->BtempProtected",disable ? 1 : 0);
+        cmn_Debug("generate->BtempProtected",enable ? 1 : 0);
         generate->BtempProtected = enable ? 1 : 0;
     }
     else {
@@ -394,11 +437,11 @@ int generate_getLatchTempAlarm(rp_channel_t channel, bool *state){
 
 int generate_setLatchTempAlarm(rp_channel_t channel, bool state) {
     if (channel == RP_CH_1) {
-        cmn_Debug("generate->AlatchedTempAlarm",disable ? 1 : 0);
+        cmn_Debug("generate->AlatchedTempAlarm",state ? 1 : 0);
         generate->AlatchedTempAlarm = state ? 1 : 0;
     }
     else if (channel == RP_CH_2) {
-        cmn_Debug("generate->BlatchedTempAlarm",disable ? 1 : 0);
+        cmn_Debug("generate->BlatchedTempAlarm",state ? 1 : 0);
         generate->BlatchedTempAlarm = state ? 1 : 0;
     }
     else {
@@ -416,4 +459,84 @@ int generate_getRuntimeTempAlarm(rp_channel_t channel, bool *state){
     return RP_OK;
 }
 
-#endif
+int generate_setBurstLastValue(rp_channel_t channel,rp_gen_gain_t gain, float amplitude){
+    float fsBase = 0;
+    if (rp_HPGetHWDACFullScale(&fsBase) != RP_HP_OK){
+        ERROR("Can't get fast HW DAC full scale");
+        return RP_NOTS;
+    }
+
+    if (fsBase == 0){
+        ERROR("HW DAC Full Scale is zero");
+        return RP_NOTS;
+    }
+
+    uint8_t bits = 0;
+    if (rp_HPGetFastDACBits(&bits) != RP_HP_OK){
+        ERROR("Can't get fast DAC bits");
+        return RP_NOTS;
+    }
+
+    bool is_sign = false;
+    if (rp_HPGetFastDACIsSigned(&is_sign) != RP_HP_OK){
+        ERROR("Can't get fast DAC sign value");
+        return RP_NOTS;
+    }
+
+    uint32_t cnt = cmn_convertToCnt(amplitude,bits,fsBase,is_sign,1.0,0);
+    cmn_DebugCh("generate->BurstFinalValue_ch",channel,cnt);
+    CHANNEL_ACTION(channel,
+        generate->BurstFinalValue_chA = cnt,
+        generate->BurstFinalValue_chB = cnt)
+    return RP_OK;
+}
+
+
+int generate_setInitGenValue(rp_channel_t channel,rp_gen_gain_t gain, float amplitude){
+    float fsBase = 0;
+    if (rp_HPGetHWDACFullScale(&fsBase) != RP_HP_OK){
+        ERROR("Can't get fast HW DAC full scale");
+        return RP_NOTS;
+    }
+
+    if (fsBase == 0){
+        ERROR("HW DAC Full Scale is zero");
+        return RP_NOTS;
+    }
+
+    uint8_t bits = 0;
+    if (rp_HPGetFastDACBits( &bits) != RP_HP_OK){
+        ERROR("Can't get fast DAC bits");
+        return RP_NOTS;
+    }
+
+    bool is_sign = false;
+    if (rp_HPGetFastDACIsSigned(&is_sign) != RP_HP_OK){
+        ERROR("Can't get fast DAC sign value");
+        return RP_NOTS;
+    }
+
+    uint32_t cnt = cmn_convertToCnt(amplitude,bits,fsBase,is_sign,1.0,0);
+    cmn_DebugCh("generate->initGenValue_ch",channel,cnt);
+    CHANNEL_ACTION(channel,
+        generate->initGenValue_chA = cnt,
+        generate->initGenValue_chB = cnt)
+    return RP_OK;
+}
+
+int generate_SetTriggerDebouncer(uint32_t value){
+    if (DEBAUNCER_MASK < value) {
+        cmn_Debug("[generate_SetTriggerDebouncer] Error: osc_reg.trig_dbc_t <- ",value);
+        return RP_EIPV;
+    }
+    cmn_Debug("[generate_SetTriggerDebouncer] osc_reg.trig_dbc_t <- ",value);
+    generate->trig_dbc_t = value;
+
+    return RP_OK;
+}
+
+int generate_GetTriggerDebouncer(uint32_t *value){
+    *value = generate->trig_dbc_t;
+    cmn_Debug("[generate_GetTriggerDebouncer] osc_reg.trig_dbc_t ->",*value);
+    return RP_OK;
+}

@@ -16,16 +16,12 @@ set(CMAKE_CXX_COMPILER "g++")
 set(CMAKE_CXX_STANDARD 11)
 set(C_STANDARD 11)
 
-if(NOT DEFINED MODEL)
-  set(MODEL ANY)
-endif()
 
 if(NOT DEFINED INSTALL_DIR)
     message(WARNING,"Installation path not set. Installation will be skipped")
     set(IS_INSTALL OFF)
 endif()
 
-message(STATUS "RedPitaya model=${MODEL}")
 message(STATUS "VERSION=${VERSION}")
 message(STATUS "REVISION=${REVISION}")
 message(STATUS "Install path ${INSTALL_DIR}")
@@ -40,6 +36,12 @@ message(STATUS "Compiler C++ ID: ${CMAKE_CXX_COMPILER_ID}")
 message(STATUS "Compiler C++version: ${CMAKE_CXX_COMPILER_VERSION}")
 message(STATUS "Compiler C++ is part: ${CMAKE_COMPILER_IS_GNUCXX}")
 
+list(APPEND r_paths
+    /opt/redpitaya/lib
+    /opt/redpitaya/lib/web
+)
+
+set(CMAKE_INSTALL_RPATH ${r_paths})
 
 include_directories("include")
 include_directories("include/redpitaya")
@@ -49,7 +51,7 @@ file(GLOB PR_HW_SOURCES "src/*.c")
 
 add_compile_options(-mcpu=cortex-a9 -mfpu=neon-fp16 -fPIC)
 add_compile_definitions(ARCH_ARM)
-add_compile_options(-std=c11 -Wall -pedantic -Wextra  -DVERSION=${VERSION} -DREVISION=${REVISION} -D${MODEL} $<$<CONFIG:Debug>:-g3> $<$<CONFIG:Release>:-Os> -ffunction-sections -fdata-sections)
+add_compile_options(-std=c11 -Wall -pedantic -Wextra  -DVERSION=${VERSION} -DREVISION=${REVISION} $<$<CONFIG:Debug>:-g3> $<$<CONFIG:Release>:-Os> -ffunction-sections -fdata-sections)
 
 add_library(${PROJECT_NAME}-obj OBJECT ${PR_HW_SOURCES})
 
@@ -67,7 +69,7 @@ if(BUILD_SHARED)
             DESTINATION ${INSTALL_DIR} FILES_MATCHING PATTERN "*.h")
         install(DIRECTORY ${CMAKE_SOURCE_DIR}/src/
             DESTINATION ${INSTALL_DIR}/include/api2 FILES_MATCHING PATTERN "*.h")
-    endif()         
+    endif()
 endif()
 
 
@@ -84,7 +86,7 @@ if(BUILD_STATIC)
             DESTINATION ${INSTALL_DIR} FILES_MATCHING PATTERN "*.h")
         install(DIRECTORY ${CMAKE_SOURCE_DIR}/src/
             DESTINATION ${INSTALL_DIR}/include/api2 FILES_MATCHING PATTERN "*.h")
-        endif()  
+        endif()
 endif()
 
 if(BUILD_DOC)
@@ -94,5 +96,4 @@ set(DOXY_INPUT ${CMAKE_SOURCE_DIR})
 ADD_DOCUMENTATION(doc doc/doxyfile.inc)
 endif()
 
-unset(MODEL CACHE)
 unset(INSTALL_DIR CACHE)

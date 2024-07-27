@@ -56,7 +56,7 @@ auto getNewFileName(CStreamSettings::DataFormat _fileType,std::string &_filePath
     if (_fileType == CStreamSettings::DataFormat::TDMS) filename += "tdms";
     if (_fileType == CStreamSettings::DataFormat::WAV)  filename += "wav";
     if (_fileType == CStreamSettings::DataFormat::BIN)  filename += "bin";
-    
+
     return filename;
 }
 
@@ -87,14 +87,14 @@ CStreamingFile::CStreamingFile(CStreamSettings::DataFormat _fileType,std::string
     m_waveWriter = new CWaveWriter();
 
     m_file_manager->outSpaceNotify.connect([&](){
-        stop(CStreamingFile::OUT_SPACE);
+        stop(CStreamingFile::OUT_SPACE,false);
     });
 }
 
 
 CStreamingFile::~CStreamingFile()
 {
-    stop();
+    stopImmediately();
     if (m_file_manager){
         delete m_file_manager;
         m_file_manager = nullptr;
@@ -121,7 +121,7 @@ auto CStreamingFile::isOutOfSpace() -> bool {
     if (m_file_manager) {
         return m_file_manager->isOutOfSpace();
     }
-    return false;  
+    return false;
 }
 
 auto CStreamingFile::run(std::string _prefix) -> void {
@@ -138,13 +138,13 @@ auto CStreamingFile::run(std::string _prefix) -> void {
     m_file_manager->startWrite(m_fileType);
 }
 
-auto CStreamingFile::stop(CStreamingFile::EStopReason reason) -> void{
+auto CStreamingFile::stop(CStreamingFile::EStopReason reason, bool _flush) -> void{
     std::lock_guard<std::mutex> lock(m_stopMtx);
     if (m_file_manager) {
-        m_file_manager->stopWrite(false);
+        m_file_manager->stopWrite(_flush);
         if (m_testMode){
             m_file_manager->deleteFile();
-        }        
+        }
     }
     if (m_fileLogger && !m_testMode)
         m_fileLogger->dumpToFile();
@@ -154,8 +154,12 @@ auto CStreamingFile::stop(CStreamingFile::EStopReason reason) -> void{
     }
 }
 
-auto CStreamingFile::stop() -> void {    
-    stop(CStreamingFile::NORMAL);
+auto CStreamingFile::stopImmediately() -> void {
+    stop(CStreamingFile::NORMAL,false);
+}
+
+auto CStreamingFile::stopAndFlush() -> void {
+    stop(CStreamingFile::NORMAL,true);
 }
 
 auto CStreamingFile::convertBuffers(DataLib::CDataBuffersPack::Ptr pack, DataLib::EDataBuffersPackChannel channel,bool lockADCTo1V) -> SBuffPass {
@@ -262,7 +266,7 @@ auto CStreamingFile::passBuffers(DataLib::CDataBuffersPack::Ptr pack) -> int {
         map[DataLib::CH3] = bufferCh3;
         map[DataLib::CH4] = bufferCh4;
         bool noMemoryException = false;
-        for(auto i = (int)DataLib::CH1; i < (int)DataLib::CH4; i++){
+        for(auto i = (int)DataLib::CH1; i <= (int)DataLib::CH4; i++){
             DataLib::EDataBuffersPackChannel ch = (DataLib::EDataBuffersPackChannel)i;
             if (map[ch].buffer == nullptr && map[ch].bufferLen){
                 noMemoryException = true;
@@ -270,7 +274,7 @@ auto CStreamingFile::passBuffers(DataLib::CDataBuffersPack::Ptr pack) -> int {
         }
         if (!noMemoryException){
             if (m_samples != 0){
-                for(auto i = (int)DataLib::CH1; i < (int)DataLib::CH4; i++){
+                for(auto i = (int)DataLib::CH1; i <= (int)DataLib::CH4; i++){
                     DataLib::EDataBuffersPackChannel ch = (DataLib::EDataBuffersPackChannel)i;
                     if (map[ch].samplesCount + m_passSizeSamples[ch] > m_samples){
                         map[ch].samplesCount = m_samples - m_passSizeSamples[ch];
@@ -308,7 +312,7 @@ auto CStreamingFile::passBuffers(DataLib::CDataBuffersPack::Ptr pack) -> int {
         map[DataLib::CH4] = bufferCh4;
 
         bool noMemoryException = false;
-        for(auto i = (int)DataLib::CH1; i < (int)DataLib::CH4; i++){
+        for(auto i = (int)DataLib::CH1; i <= (int)DataLib::CH4; i++){
             DataLib::EDataBuffersPackChannel ch = (DataLib::EDataBuffersPackChannel)i;
             if (map[ch].buffer == nullptr && map[ch].bufferLen){
                 noMemoryException = true;
@@ -317,7 +321,7 @@ auto CStreamingFile::passBuffers(DataLib::CDataBuffersPack::Ptr pack) -> int {
 
         if (!noMemoryException){
             if (m_samples != 0){
-                for(auto i = (int)DataLib::CH1; i < (int)DataLib::CH4; i++){
+                for(auto i = (int)DataLib::CH1; i <= (int)DataLib::CH4; i++){
                     DataLib::EDataBuffersPackChannel ch = (DataLib::EDataBuffersPackChannel)i;
                     if (map[ch].samplesCount + m_passSizeSamples[ch] > m_samples){
                         map[ch].samplesCount = m_samples - m_passSizeSamples[ch];
@@ -341,21 +345,29 @@ auto CStreamingFile::passBuffers(DataLib::CDataBuffersPack::Ptr pack) -> int {
     }
 
     if (m_fileType == CStreamSettings::BIN){
-
+        // This algorithm is faster than copying data to TDMS and WAV. Don't redo it
+        auto map = std::map<DataLib::EDataBuffersPackChannel,uint32_t>();
         if (m_samples != 0){
-            for(auto i = (int)DataLib::CH1; i < (int)DataLib::CH4; i++){
+            for(auto i = (int)DataLib::CH1; i <= (int)DataLib::CH4; i++){
                 DataLib::EDataBuffersPackChannel ch = (DataLib::EDataBuffersPackChannel)i;
-                if (pack->getBuffer(ch)){
+                auto buff = pack->getBuffer(ch);
+                if (buff){
                     if (m_passSizeSamples[ch] > m_samples){
-                        pack->getBuffer(ch)->reset();
-                    }else{
-                        m_passSizeSamples[ch] += pack->getBuffer(ch)->getSamplesWithLost();
+                        buff->reset();
+                        map[ch] = 0;
+                    } else if (m_passSizeSamples[ch] + buff->getSamplesCount() > m_samples){
+                        map[ch] = m_samples - m_passSizeSamples[ch];
+                        m_passSizeSamples[ch] += map[ch];
+                    }
+                    else {
+                        m_passSizeSamples[ch] += buff->getSamplesWithLost();
+                        map[ch] = buff->getSamplesCount();
                     }
                 }
             }
         }
 
-        auto stream_data = buildBINStream(pack);
+        auto stream_data = buildBINStream(pack,map);
         if ( m_file_manager->isWork()){
             if (!m_file_manager->addBufferToWrite(stream_data))
             {
@@ -364,7 +376,7 @@ auto CStreamingFile::passBuffers(DataLib::CDataBuffersPack::Ptr pack) -> int {
         }
     }
 
-    for(auto i = (int)DataLib::CH1; i < (int)DataLib::CH4; i++){
+    for(auto i = (int)DataLib::CH1; i <= (int)DataLib::CH4; i++){
         DataLib::EDataBuffersPackChannel ch = (DataLib::EDataBuffersPackChannel)i;
         auto buff = pack->getBuffer(ch);
         if (buff){
@@ -377,7 +389,7 @@ auto CStreamingFile::passBuffers(DataLib::CDataBuffersPack::Ptr pack) -> int {
 
     if (m_samples){
         bool reachLimits = true;
-        for(auto i = (int)DataLib::CH1; i < (int)DataLib::CH4; i++){
+        for(auto i = (int)DataLib::CH1; i <= (int)DataLib::CH4; i++){
             DataLib::EDataBuffersPackChannel ch = (DataLib::EDataBuffersPackChannel)i;
             if (pack->isChannelPresent(ch)){
                 if (m_passSizeSamples[ch] < m_samples){
@@ -387,7 +399,7 @@ auto CStreamingFile::passBuffers(DataLib::CDataBuffersPack::Ptr pack) -> int {
             }
         }
         if(reachLimits){
-            stop(CStreamingFile::REACH_LIMIT);
+            stop(CStreamingFile::REACH_LIMIT,true);
         }
     }
     return 1;

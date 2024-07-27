@@ -11,7 +11,7 @@
 #include "net_lib/asio_common.h"
 #include "data_lib/signal.hpp"
 
-#define FILE_PATH "/tmp/stream_files"
+#define FILE_PATH "/home/redpitaya/streaming_files"
 #define ZERO_BUFFER_SIZE 1048576
 #define MIN(X,Y) ((X < Y) ? X: Y)
 #define MAX(X,Y) ((X > Y) ? X: Y)
@@ -30,7 +30,7 @@ public:
     };
 
     static auto makeEmptyDir(const std::string &_filePath) -> void;
-  
+
     using Ptr = std::shared_ptr<CStreamingFile>;
 
 
@@ -41,7 +41,8 @@ public:
 
 
     auto run(std::string _prefix) -> void;
-    auto stop() -> void;
+    auto stopAndFlush() -> void;
+    auto stopImmediately() -> void;
     auto addNetWorkLost(uint64_t count) -> void;
     auto disableNotify() -> void;
 
@@ -76,14 +77,14 @@ private:
     uint64_t          m_samples;
     std::mutex        m_stopMtx;
     std::map<DataLib::EDataBuffersPackChannel,uint64_t> m_passSizeSamples;
-    
+
     bool m_testMode;
     bool m_volt_mode;
     bool m_disableNotify;
-    
+
     CStreamSettings::DataFormat m_fileType;
 
-    auto stop(EStopReason reason) -> void;
+    auto stop(EStopReason reason, bool _flush) -> void;
     auto convertBuffers(DataLib::CDataBuffersPack::Ptr pack, DataLib::EDataBuffersPackChannel channel,bool lockADCTo1V) -> SBuffPass;
 };
 

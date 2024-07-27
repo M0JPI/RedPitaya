@@ -7,9 +7,6 @@
  *
  * (c) Red Pitaya  http://www.redpitaya.com
  *
- * This part of code is written in C programming language.
- * Please visit http://en.wikipedia.org/wiki/C_(programming_language)
- * for more details on the language used herein.
  */
 
 
@@ -27,10 +24,10 @@ scpi_result_t RP_SPI_GetSettings(scpi_t * context);
 
 scpi_result_t RP_SPI_CreateMessage(scpi_t * context);
 scpi_result_t RP_SPI_DestroyMessage(scpi_t * context);
-scpi_result_t RP_SPI_GetMessageLen(scpi_t * context);
-scpi_result_t RP_SPI_GetRXBuffer(scpi_t * context);
-scpi_result_t RP_SPI_GetTXBuffer(scpi_t * context);
-scpi_result_t RP_SPI_GetCSChangeState(scpi_t * context);
+scpi_result_t RP_SPI_GetMessageLenQ(scpi_t * context);
+scpi_result_t RP_SPI_GetRXBufferQ(scpi_t * context);
+scpi_result_t RP_SPI_GetTXBufferQ(scpi_t * context);
+scpi_result_t RP_SPI_GetCSChangeStateQ(scpi_t * context);
 
 
 scpi_result_t RP_SPI_SetTX(scpi_t * context);
@@ -41,13 +38,16 @@ scpi_result_t RP_SPI_SetTXRXCS(scpi_t * context);
 scpi_result_t RP_SPI_SetRXCS(scpi_t * context);
 
 scpi_result_t RP_SPI_SetMode(scpi_t * context);
-scpi_result_t RP_SPI_GetMode(scpi_t * context);
+scpi_result_t RP_SPI_GetModeQ(scpi_t * context);
+
+scpi_result_t RP_SPI_SetCSMode(scpi_t * context);
+scpi_result_t RP_SPI_GetCSModeQ(scpi_t * context);
 
 scpi_result_t RP_SPI_SetSpeed(scpi_t * context);
-scpi_result_t RP_SPI_GetSpeed(scpi_t * context);
+scpi_result_t RP_SPI_GetSpeedQ(scpi_t * context);
 
 scpi_result_t RP_SPI_SetWord(scpi_t * context);
-scpi_result_t RP_SPI_GetWord(scpi_t * context);
+scpi_result_t RP_SPI_GetWordQ(scpi_t * context);
 
 scpi_result_t RP_SPI_Pass(scpi_t * context);
 

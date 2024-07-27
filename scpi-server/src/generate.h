@@ -7,9 +7,6 @@
  *
  * (c) Red Pitaya  http://www.redpitaya.com
  *
- * This part of code is written in C programming language.
- * Please visit http://en.wikipedia.org/wiki/C_(programming_language)
- * for more details on the language used herein.
  */
 
 
@@ -25,6 +22,7 @@ scpi_result_t RP_GenReset(scpi_t * context);
 scpi_result_t RP_GenSync(scpi_t * context);
 scpi_result_t RP_GenFrequency(scpi_t * context);
 scpi_result_t RP_GenFrequencyQ(scpi_t * context);
+scpi_result_t RP_GenFrequencyDirect(scpi_t *context);
 scpi_result_t RP_GenWaveForm(scpi_t * context);
 scpi_result_t RP_GenWaveFormQ(scpi_t * context);
 scpi_result_t RP_GenAmplitude(scpi_t * context);
@@ -45,10 +43,21 @@ scpi_result_t RP_GenBurstRepetitions(scpi_t * context);
 scpi_result_t RP_GenBurstRepetitionsQ(scpi_t * context);
 scpi_result_t RP_GenBurstPeriod(scpi_t * context);
 scpi_result_t RP_GenBurstPeriodQ(scpi_t * context);
+scpi_result_t RP_GenBurstLastValue(scpi_t * context);
+scpi_result_t RP_GenBurstLastValueQ(scpi_t * context);
+
+scpi_result_t RP_GenInitValue(scpi_t * context);
+scpi_result_t RP_GenInitValueQ(scpi_t * context);
+
 scpi_result_t RP_GenTriggerSource(scpi_t * context);
 scpi_result_t RP_GenTriggerSourceQ(scpi_t * context);
 scpi_result_t RP_GenTrigger(scpi_t *context);
 scpi_result_t RP_GenTriggerBoth(scpi_t *context);
 
+scpi_result_t RP_GenExtTriggerDebouncerUs(scpi_t *context);
+scpi_result_t RP_GenExtTriggerDebouncerUsQ(scpi_t *context);
+
+scpi_result_t RP_GenLoad(scpi_t * context);
+scpi_result_t RP_GenLoadQ(scpi_t * context);
 
 #endif /* GENERATE_H_ */

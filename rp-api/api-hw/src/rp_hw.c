@@ -19,6 +19,57 @@
 #include "spi.h"
 #include "led_system.h"
 #include "i2c.h"
+#include "sensors.h"
+
+#define XSTR(s) STR(s)
+#define STR(s) #s
+
+#ifndef VERSION
+#define VERSION_STR "0.00-0000"
+#else
+#define VERSION_STR XSTR(VERSION)
+#endif
+
+#ifndef REVISION
+#define REVISION_STR "unknown"
+#else
+#define REVISION_STR XSTR(REVISION)
+#endif
+
+static char version[50];
+
+const char* rp_HwGetVersion()
+{
+    sprintf(version, "%s (%s)", VERSION_STR, REVISION_STR);
+    return version;
+}
+
+const char* rp_HwGetError(int errorCode) {
+    switch (errorCode) {
+        case RP_HW_OK:         return "OK";
+        case RP_HW_EAL:     return "Bad alloc.";
+        case RP_HW_EUTO:    return "Timeout read from uart.";
+        case RP_HW_EIPV:    return "Invalid parameter value.";
+        case RP_HW_EUF:     return "Unsupported Feature.";
+        case RP_HW_EIU:     return "Failed to init uart.";
+        case RP_HW_ERU:     return "Failed read from uart.";
+        case RP_HW_EWU:     return "Failed write to uart.";
+        case RP_HW_ESU:     return "Failed set settings to uart.";
+        case RP_HW_EGU:     return "Failed get settings from uart.";
+        case RP_HW_EIS:     return "Failed to init SPI.";
+        case RP_HW_ESGS:    return "Failed get settings from SPI.";
+        case RP_HW_ESSS:    return "Failed set settings to SPI.";
+        case RP_HW_EST:     return "Failed SPI read/write.";
+        case RP_HW_ESMI:    return "Failed SPI message not init.";
+        case RP_HW_ESMO:    return "Failed index SPI message out of range.";
+        case RP_HW_EIIIC:   return "Failed to init I2C.";
+        case RP_HW_ERIIC:   return "Failed to read from I2C.";
+        case RP_HW_EWIIC:  return " Failed to write to I2C.";
+        case RP_HW_ESIIC:  return "Failed to set slave mode for I2C.";
+        case RP_HW_EBIIC:  return "Failed I2C. Buffer is NULL.";
+        default:       return "Unknown error";
+    }
+}
 
 int rp_UartInit(){
     return uart_Init();
@@ -152,6 +203,14 @@ int rp_SPI_SetState(rp_spi_state_t state){
     return spi_SetState(state);
 }
 
+int rp_SPI_GetCSMode(rp_spi_cs_mode_t *mode){
+    return spi_GetCSMode(mode);
+}
+
+int rp_SPI_SetCSMode(rp_spi_cs_mode_t mode){
+    return spi_SetCSMode(mode);
+}
+
 int rp_SPI_GetOrderBit(rp_spi_order_bit_t *order){
     return spi_GetOrderBit(order);
 }
@@ -189,7 +248,7 @@ int rp_SPI_GetMessageLen(size_t *len){
 }
 
 int rp_SPI_GetRxBuffer(size_t msg,const uint8_t **buffer,size_t *len){
-    return spi_GetRxBuffer(msg,buffer,len);    
+    return spi_GetRxBuffer(msg,buffer,len);
 }
 
 int rp_SPI_GetTxBuffer(size_t msg,const uint8_t **buffer,size_t *len){
@@ -264,4 +323,36 @@ int rp_I2C_IOCTL_ReadBuffer(uint8_t *buffer, int len){
 
 int rp_I2C_IOCTL_WriteBuffer(uint8_t *buffer, int len){
     return i2c_IOCTL_WriteBuffer(buffer,len);
+}
+
+float rp_GetCPUTemperature(uint32_t *raw){
+    return sens_GetCPUTemp(raw);
+}
+
+int rp_GetPowerI4(uint32_t *raw,float* value){
+    return sens_GetPowerI4(raw,value);
+}
+
+int rp_GetPowerVCCPINT(uint32_t *raw,float* value){
+    return sens_GetPowerVCCPINT(raw,value);
+}
+
+int rp_GetPowerVCCPAUX(uint32_t *raw,float* value){
+    return sens_GetPowerVCCPAUX(raw,value);
+}
+
+int rp_GetPowerVCCBRAM(uint32_t *raw,float* value){
+    return sens_GetPowerVCCBRAM(raw,value);
+}
+
+int rp_GetPowerVCCINT(uint32_t *raw,float* value){
+    return sens_GetPowerVCCINT(raw,value);
+}
+
+int rp_GetPowerVCCAUX(uint32_t *raw,float* value){
+    return sens_GetPowerVCCAUX(raw,value);
+}
+
+int rp_GetPowerVCCDDR(uint32_t *raw,float* value){
+    return sens_GetPowerVCCDDR(raw,value);
 }

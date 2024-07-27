@@ -29,11 +29,11 @@
 #include <sys/mman.h>
 #include <stdint.h>
 
-#include "version.h"
+#include "common/version.h"
+#include "rp_hw-profiles.h"
+#include "rp.h"
 
-#define FATAL do { fprintf(stderr, "Error at line %d, file %s (%d) [%s]\n", \
-  __LINE__, __FILE__, errno, strerror(errno)); exit(1); } while(0)
- 
+
 #define MAP_SIZE 4096UL
 #define MAP_MASK (MAP_SIZE - 1)
 
@@ -56,7 +56,14 @@ int main(int argc, char **argv) {
 			"\tread addr: address\n"
             "\twrite addr: address value\n"
 			"\tread analog mixed signals: -ams\n"
-			"\tset slow DAC: -sdac AO0 AO1 AO2 AO3 [V]\n",
+			"\tset slow DAC: -sdac AO0 AO1 AO2 AO3 [V]\n"
+			"\tShow current profile: -p\n"
+			"\tShow all profiles: -pa\n"
+			"\tPrint fpga version: -f\n"
+			"\tPrint model name: -n\n"
+			"\tPrint model id: -i\n"
+			"\tReserved memory for DMA: -r\n",
+
                         argv[0], VERSION_STR, REVISION_STR);
 		return EXIT_FAILURE;
 	}
@@ -87,7 +94,116 @@ int main(int argc, char **argv) {
 		return 0;
 	}
 
-	if((fd = open("/dev/mem", O_RDWR | O_SYNC)) == -1) FATAL;
+	if (strncmp(argv[1], "-pa", 3) == 0) {
+		return rp_HPPrintAll();
+	}
+
+	if (strncmp(argv[1], "-p", 2) == 0) {
+		return rp_HPPrint();
+	}
+
+	if (strncmp(argv[1], "-r", 2) == 0) {
+		auto ret = rp_InitReset(false);
+		if (ret != RP_OK){
+			fprintf(stderr,"Error init rp api\n");
+			return -1;
+		}
+		uint32_t start,size;
+		rp_AcqAxiGetMemoryRegion(&start,&size);
+		printf("Reserved memory:\n");
+		printf("\tstart:\t0x%X (%d)\n",start,start);
+		printf("\tend:\t0x%X (%d)\n",start + size,start + size);
+		printf("\tsize:\t0x%X (%d) %d kB\n", size,size,size/1024);
+		rp_Release();
+		return 0;
+	}
+
+	if (strncmp(argv[1], "-f", 2) == 0) {
+		rp_HPeModels_t model;
+		auto ret = rp_HPGetModel(&model);
+		switch (model)
+		{
+			case STEM_125_10_v1_0:
+				printf("z10_125");
+				break;
+			case STEM_125_14_v1_0:
+				printf("z10_125");
+				break;
+			case STEM_125_14_v1_1:
+				printf("z10_125");
+				break;
+			case STEM_125_14_LN_v1_1:
+				printf("z10_125");
+				break;
+			case STEM_122_16SDR_v1_0:
+				printf("z20_122");
+				break;
+			case STEM_122_16SDR_v1_1:
+				printf("z20_122");
+				break;
+			case STEM_125_14_Z7020_v1_0:
+				printf("z20_125");
+				break;
+			case STEM_125_14_Z7020_LN_v1_1:
+				printf("z20_125");
+				break;
+			case STEM_125_14_Z7020_4IN_v1_0:
+				printf("z20_125_4ch");
+				break;
+			case STEM_125_14_Z7020_4IN_v1_2:
+				printf("z20_125_4ch");
+				break;
+			case STEM_125_14_Z7020_4IN_v1_3:
+				printf("z20_125_4ch");
+				break;
+			case STEM_250_12_v1_0:
+				printf("z20_250_1_0");
+				break;
+			case STEM_250_12_v1_1:
+				printf("z20_250");
+				break;
+			case STEM_250_12_v1_2:
+				printf("z20_250");
+				break;
+			case STEM_250_12_v1_2a:
+				printf("z20_250");
+				break;
+			case STEM_250_12_v1_2b:
+				printf("z20_250");
+				break;
+			case STEM_250_12_120:
+				printf("z20_250");
+				break;
+			default:
+				printf("undefined");
+				break;
+		}
+		return ret;
+	}
+
+	if (strncmp(argv[1], "-n", 2) == 0) {
+		char *model_name = nullptr;
+		auto ret = rp_HPGetModelName(&model_name);
+		if (ret == RP_HP_OK){
+			printf("%s",model_name);
+		}else{
+			printf("[Error]");
+		}
+		return ret;
+	}
+
+	if (strncmp(argv[1], "-i", 2) == 0) {
+		rp_HPeModels_t model;
+		auto ret = rp_HPGetModel(&model);
+		if (ret == RP_HP_OK){
+			printf("%d",model);
+		}else{
+			printf("-1");
+		}
+		return ret;
+	}
+
+	if((fd = open("/dev/mem", O_RDWR | O_SYNC)) == -1) FATAL("Error open device");
 
 	/* Read from command line */
 	unsigned long addr;
@@ -98,7 +214,7 @@ int main(int argc, char **argv) {
 
 	/* Map one page */
 	map_base = mmap(0, MAP_SIZE, PROT_READ | PROT_WRITE, MAP_SHARED, fd, addr & ~MAP_MASK);
-	if(map_base == (void *) -1) FATAL;
+	if(map_base == (void *) -1) FATAL("Error map memory");
 
 	if (addr != 0) {
 		if (val_count == 0) {
@@ -109,12 +225,12 @@ int main(int argc, char **argv) {
 		}
 	}
 	if (map_base != (void*)(-1)) {
-		if(munmap(map_base, MAP_SIZE) == -1) FATAL;
+		if(munmap(map_base, MAP_SIZE) == -1) FATAL("Error unmap memory");
 		map_base = (void*)(-1);
 	}
 
 	if (map_base != (void*)(-1)) {
-		if(munmap(map_base, MAP_SIZE) == -1) FATAL;
+		if(munmap(map_base, MAP_SIZE) == -1) FATAL("Error unmap memory");
 	}
 	if (fd != -1) {
 		close(fd);
@@ -152,7 +268,7 @@ void write_values(unsigned long a_addr, int a_type, unsigned long* a_values, ssi
 	fflush(stdout);
 }
 
-int parse_from_argv(int a_argc, char **a_argv, unsigned long* a_addr, 
+int parse_from_argv(int a_argc, char **a_argv, unsigned long* a_addr,
 	int* a_type, unsigned long** a_values, ssize_t* a_len) {
 
 	int val_count = 0;
@@ -171,5 +287,3 @@ int parse_from_argv(int a_argc, char **a_argv, unsigned long* a_addr,
 	*a_len = val_count;
 	return 0;
 }
-
-

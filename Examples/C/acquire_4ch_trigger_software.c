@@ -5,8 +5,21 @@
 #include <stdlib.h>
 #include <unistd.h>
 #include "rp.h"
+#include "rp_hw-profiles.h"
+
 
 int main(int argc, char **argv){
+
+        uint8_t c = 0;
+        if (rp_HPGetFastADCChannelsCount(&c) != RP_HP_OK){
+                fprintf(stderr,"[Error] Can't get fast ADC channels count\n");
+                return 1;
+        }
+
+        if (c!= 4){
+                fprintf(stderr,"[Error] The number of channels is wrong\n");
+                return 1;
+        }
 
         /* Print error, if rp_Init() function failed */
         if(rp_Init() != RP_OK){
@@ -14,10 +27,6 @@ int main(int argc, char **argv){
         }
 
         uint32_t buff_size = 16384;
-        float *buff_ch1 = (float *)malloc(buff_size * sizeof(float));
-        float *buff_ch2 = (float *)malloc(buff_size * sizeof(float));
-        float *buff_ch3 = (float *)malloc(buff_size * sizeof(float));
-        float *buff_ch4 = (float *)malloc(buff_size * sizeof(float));
 
         rp_AcqReset();
         rp_AcqSetDecimation(RP_DEC_8);
@@ -46,21 +55,19 @@ int main(int argc, char **argv){
 		rp_AcqGetBufferFillState(&fillState);
 	}
 
-        uint32_t pos = 0;        
+        uint32_t pos = 0;
 	rp_AcqGetWritePointerAtTrig(&pos);
-        rp_AcqGetDataV2(pos, &buff_size, buff_ch1,buff_ch2, buff_ch3, buff_ch4);
+        buffers_t *b = rp_createBuffer(4,buff_size,false,false,true);
+
+        rp_AcqGetData(pos, b);
 
         int i;
         for(i = 0; i < buff_size; i++){
-                printf("%f %f %f %f\n", buff_ch1[i],buff_ch2[i],buff_ch3[i],buff_ch4[i]);
+                printf("%f %f %f %f\n", b->ch_f[0][i],b->ch_f[1][i],b->ch_f[2][i],b->ch_f[3][i]);
         }
         /* Releasing resources */
-        free(buff_ch1);
-        free(buff_ch2);
-        free(buff_ch3);
-        free(buff_ch4);
+        rp_deleteBuffer(b);
         rp_Release();
 
         return 0;
 }
-

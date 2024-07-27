@@ -13,21 +13,22 @@ APP=$(notdir $(CURDIR:%/=%))
 
 # Installation directory. It is changed when using the main Makefile++++++
 INSTALL_DIR ?= .
-MODEL ?= Z10
 
 LIBSCPI=scpi-parser/libscpi/dist/libscpi.a
 SCPISRV=scpi-server
 ARTIFACTS= $(LIBSCPI) $(SCPISRV)
 
+.PHONY: all
+
 all: $(LIBSCPI) $(SCPISRV)
 
 $(SCPISRV):
-	$(MAKE) -C src MODEL=$(MODEL) INSTALL_DIR=$(abspath $(INSTALL_DIR))
+	$(MAKE) -C src INSTALL_DIR=$(abspath $(INSTALL_DIR))
 
 $(LIBSCPI):
 	$(MAKE) -C scpi-parser CC=$(CROSS_COMPILE)gcc USER_FULL_ERROR_LIST=1
 
-install:
+install: all
 	mkdir -p $(INSTALL_DIR)/bin
 	cp $(SCPISRV) $(INSTALL_DIR)/bin
 

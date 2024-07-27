@@ -17,7 +17,7 @@
         2: { name: "ADC gain   (1:20)", img: "./img/125/RP_125_REF_HV.png", hint: "Please set HV mode and connect IN1 and IN2 to reference DC source.", input: 5 },
         3: { name: "ADC offset (1:1)", img: "./img/125/RP_125_GND.png", hint: "Please set LV mode and connect IN1 and IN2 to GND." },
         4: { name: "ADC gain   (1:1)", img: "./img/125/RP_125_REF.png", hint: "Please set LV mode and connect IN1 and IN2 to reference DC source.", input: 0.5 },
-        5: { name: "Disable DAC", span: true },
+        5: { name: "Start gen with DC 0V amp", span: true },
         6: { name: "DAC offset", img: "./img/125/RP_125_GEN.png", hint: "Please set LV mode and connect OUT1 to IN1 and OUT2 to IN2." },
         7: { name: "Enable DAC", span: true },
         8: { name: "DAC gain", img: "./img/125/RP_125_GEN.png", hint: "Please set LV mode and connect OUT1 to IN1 and OUT2 to IN2." },
@@ -26,10 +26,10 @@
 
     OBJ.STATES_125_14_4CH = {
         0: { name: "Reset to default", span: true },
-        1: { name: "ADC offset (1:20)", img: "./img/125_4CH/RP_125_GND_HV.png", hint: "Please set HV mode and connect IN1, IN2, IN3 and IN2 to GND." },
-        2: { name: "ADC gain   (1:20)", img: "./img/125_4CH/RP_125_REF_HV.png", hint: "Please set HV mode and connect IN1, IN2, IN3 and IN2 to reference DC source.", input: 5 },
-        3: { name: "ADC offset (1:1)", img: "./img/125_4CH/RP_125_GND.png", hint: "Please set LV mode and connect IN1, IN2, IN3 and IN2 to GND." },
-        4: { name: "ADC gain   (1:1)", img: "./img/125_4CH/RP_125_REF.png", hint: "Please set LV mode and connect IN1, IN2, IN3 and IN2 to reference DC source.", input: 0.5 },
+        1: { name: "ADC offset (1:20)", img: "./img/125_4CH/RP_125_GND_HV.png", hint: "Please set HV mode and connect IN1, IN2, IN3 and IN4 to GND." },
+        2: { name: "ADC gain   (1:20)", img: "./img/125_4CH/RP_125_REF_HV.png", hint: "Please set HV mode and connect IN1, IN2, IN3 and IN4 to reference DC source.", input: 5 },
+        3: { name: "ADC offset (1:1)", img: "./img/125_4CH/RP_125_GND.png", hint: "Please set LV mode and connect IN1, IN2, IN3 and IN4 to GND." },
+        4: { name: "ADC gain   (1:1)", img: "./img/125_4CH/RP_125_REF.png", hint: "Please set LV mode and connect IN1, IN2, IN3 and IN4 to reference DC source.", input: 0.5 },
         5: { name: "Calibration complete", span: true, end: true }
     };
 
@@ -41,11 +41,11 @@
         4: { name: "Set 1:20 DC mode", span: true },
         5: { name: "ADC offset DC (1:20)", img: "./img/250/RP_250_GND.png", hint: "Please connect IN1 and IN2 to GND." },
         6: { name: "ADC gain DC   (1:20)", img: "./img/250/RP_250_REF.png", hint: "Please connect IN1 and IN2 to reference DC source.", input: 1 },
-        7: { name: "Disable DAC", span: true },
+        7: { name: "Start gen with DC 0V amp", span: true },
         8: { name: "DAC offset x1", img: "./img/250/RP_250_GEN.png", hint: "Please connect OUT1 to IN1 and OUT2 to IN2." },
         9: { name: "Enable DAC", span: true },
         10: { name: "DAC gain x1", img: "./img/250/RP_250_GEN.png", hint: "Please connect OUT1 to IN1 and OUT2 to IN2." },
-        11: { name: "Disable DAC", span: true },
+        11: { name: "Start gen with DC 0V amp", span: true },
         12: { name: "DAC offset x5", img: "./img/250/RP_250_GEN.png", hint: "Please connect OUT1 to IN1 and OUT2 to IN2." },
         13: { name: "Enable DAC", span: true },
         14: { name: "DAC gain x5", img: "./img/250/RP_250_GEN.png", hint: "Please connect OUT1 to IN1 and OUT2 to IN2." },
@@ -77,6 +77,9 @@
             if (OBJ.amModel === "Z10" || OBJ.amModel === "Z20_125") OBJ.amStates = OBJ.STATES_125_14;
             if (OBJ.amModel === "Z20_125_4CH") OBJ.amStates = OBJ.STATES_125_14_4CH;
             if (OBJ.amModel === "Z20_250_12") OBJ.amStates = OBJ.STATES_250_12;
+            if (OBJ.amModel === "Z20_250_12_120") OBJ.amStates = OBJ.STATES_250_12;
+
+            $('#am_ok_btn').on('click', function() { OBJ.amClickOkDialog() });
         }
     }
 
@@ -109,7 +112,7 @@
         newCell = row.insertCell(-1);
         newCell.setAttribute("id", id + "_ch2_after");
         if (OBJ.amModel === "Z20_125_4CH"){
-            newCell = row.insertCell(-1);    
+            newCell = row.insertCell(-1);
             newCell.setAttribute("id", id + "_ch3_befor");
             newCell = row.insertCell(-1);
             newCell.setAttribute("id", id + "_ch3_after");
@@ -510,5 +513,5 @@ $(function() {
     SM.param_callbacks["ch2_calib_pass"] = OBJ.amSetCalibValueCh2;
     SM.param_callbacks["ch3_calib_pass"] = OBJ.amSetCalibValueCh3;
     SM.param_callbacks["ch4_calib_pass"] = OBJ.amSetCalibValueCh4;
-    $('#am_ok_btn').on('click', function() { OBJ.amClickOkDialog() });
+
 });

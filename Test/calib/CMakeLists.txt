@@ -8,10 +8,6 @@ set(CMAKE_RUNTIME_OUTPUT_DIRECTORY ${CMAKE_BINARY_DIR}/output)
 
 project(calib)
 
-if(NOT DEFINED MODEL)
-  set(MODEL Z10)
-endif()
-
 if(NOT DEFINED INSTALL_DIR)
     message(FATAL_ERROR,"Installation path not set.")
 endif()
@@ -25,7 +21,6 @@ if(NOT DEFINED REVISION)
 endif()
 
 
-message(STATUS "RedPitaya model=${MODEL}")
 message(STATUS "Install path ${INSTALL_DIR}")
 message(STATUS "VERSION=${VERSION}")
 message(STATUS "REVISION=${REVISION}")
@@ -40,6 +35,12 @@ message(STATUS "Compiler C++ ID: ${CMAKE_CXX_COMPILER_ID}")
 message(STATUS "Compiler C++version: ${CMAKE_CXX_COMPILER_VERSION}")
 message(STATUS "Compiler C++ is part: ${CMAKE_COMPILER_IS_GNUCXX}")
 
+list(APPEND r_paths
+    /opt/redpitaya/lib
+    /opt/redpitaya/lib/web
+)
+
+set(CMAKE_INSTALL_RPATH ${r_paths})
 
 include_directories(${INSTALL_DIR}/include)
 
@@ -48,11 +49,14 @@ file(GLOB RP_HEADERS "src/*.h")
 
 add_compile_options(-mcpu=cortex-a9 -mfpu=neon-fp16 -fPIC)
 add_compile_definitions(ARCH_ARM)
-add_compile_options(-Wall -pedantic -Wextra -D${MODEL} -DVERSION=${VERSION} -DREVISION=${REVISION} $<$<CONFIG:Debug>:-g3> $<$<CONFIG:Release>:-Os>)
-
+add_compile_options(-Wall -pedantic -Wextra -DVERSION=${VERSION} -DREVISION=${REVISION} $<$<CONFIG:Debug>:-g3> $<$<CONFIG:Release>:-Os>)
 
 add_executable(${PROJECT_NAME} ${SOURCES})
+
+
+target_link_directories(${PROJECT_NAME} PRIVATE ${INSTALL_DIR}/lib)
+target_link_libraries(${PROJECT_NAME} PRIVATE rp-hw-calib rp-hw-profiles m)
+
 install(TARGETS ${PROJECT_NAME} RUNTIME DESTINATION ${INSTALL_DIR}/bin)
- 
-unset(MODEL CACHE)
+
 unset(INSTALL_DIR CACHE)
